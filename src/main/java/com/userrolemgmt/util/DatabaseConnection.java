@@ -157,10 +157,11 @@ public class DatabaseConnection {
                         "subject VARCHAR2(255) NOT NULL, " +
                         "event_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, " +
                         "data CLOB, " +
-                        "processed CHAR(1) DEFAULT ''N'', " +
+                        "is_processed CHAR(1) DEFAULT ''N'', " + // Cambiado de "processed" a "is_processed" para evitar
+                                                                 // conflictos
                         "process_time TIMESTAMP, " +
-                        "processing_attempts NUMBER DEFAULT 0, " +
-                        "error_message VARCHAR2(4000))'; "
+                        "attempts NUMBER DEFAULT 0, " + // Simplificado de "processing_attempts"
+                        "error_msg VARCHAR2(4000))'; " // Simplificado de "error_message"
                         + "EXCEPTION "
                         + "  WHEN OTHERS THEN "
                         + "    IF SQLCODE != -955 THEN "

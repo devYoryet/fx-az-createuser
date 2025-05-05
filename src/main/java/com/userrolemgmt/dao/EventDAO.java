@@ -14,45 +14,55 @@ public class EventDAO {
     }
 
     /**
-     * Registra un nuevo evento en el Event Store
+     * Registra un nuevo evento en el Event Store de manera simple
      * 
-     * @param eventType Tipo de evento (ej. UserCreated, RoleCreated)
-     * @param subject   Asunto del evento (ej. users/create)
+     * @param eventType Tipo de evento
+     * @param subject   Asunto del evento
      * @param data      Datos del evento en formato JSON
      * @return ID del evento registrado
      */
     public long storeEvent(String eventType, String subject, String data) throws SQLException {
-        String query = "INSERT INTO event_store (event_type, subject, data) VALUES (?, ?, ?) RETURNING event_id INTO ?";
+        // Consulta simple de inserción
+        String query = "INSERT INTO event_store (event_type, subject, data) VALUES (?, ?, ?)";
 
-        try (CallableStatement cstmt = connection.prepareCall(query)) {
-            cstmt.setString(1, eventType);
-            cstmt.setString(2, subject);
-            cstmt.setString(3, data);
-            cstmt.registerOutParameter(4, Types.NUMERIC); // event_id
+        try (PreparedStatement pstmt = connection.prepareStatement(query, new String[] { "event_id" })) {
+            pstmt.setString(1, eventType);
+            pstmt.setString(2, subject);
+            pstmt.setString(3, data);
 
-            cstmt.execute();
+            // Ejecutar la inserción
+            int rowsAffected = pstmt.executeUpdate();
 
-            // Obtener el ID del evento
-            long eventId = cstmt.getLong(4);
-            LOGGER.log(Level.INFO, "Evento {0} registrado con ID: {1}", new Object[] { eventType, eventId });
+            if (rowsAffected > 0) {
+                // Recuperar el ID generado
+                try (ResultSet rs = pstmt.getGeneratedKeys()) {
+                    if (rs.next()) {
+                        long eventId = rs.getLong(1);
+                        LOGGER.log(Level.INFO, "Evento {0} registrado con ID: {1}",
+                                new Object[] { eventType, eventId });
+                        return eventId;
+                    }
+                }
+            }
 
-            return eventId;
+            throw new SQLException("No se pudo obtener el ID generado");
         } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Error al registrar evento " + eventType, e);
+            LOGGER.log(Level.SEVERE, "Error al registrar evento " + eventType + ": " + e.getMessage(), e);
             throw e;
         }
     }
 
     /**
-     * Marca un evento como procesado
+     * Marca un evento como procesado de manera simple
      * 
      * @param eventId      ID del evento
      * @param success      Indica si el procesamiento fue exitoso
      * @param errorMessage Mensaje de error (si hubo)
      */
     public void markEventProcessed(long eventId, boolean success, String errorMessage) throws SQLException {
-        String query = "UPDATE event_store SET processed = ?, process_time = CURRENT_TIMESTAMP, " +
-                "processing_attempts = processing_attempts + 1, error_message = ? WHERE event_id = ?";
+        // Consulta simple de actualización
+        String query = "UPDATE event_store SET is_processed = ?, process_time = CURRENT_TIMESTAMP, " +
+                "attempts = attempts + 1, error_msg = ? WHERE event_id = ?";
 
         try (PreparedStatement pstmt = connection.prepareStatement(query)) {
             pstmt.setString(1, success ? "Y" : "N");
@@ -76,8 +86,8 @@ public class EventDAO {
      * @return ResultSet con los eventos
      */
     public ResultSet getUnprocessedEvents(int maxAttempts, int limit) throws SQLException {
-        String query = "SELECT event_id, event_type, subject, data, processing_attempts " +
-                "FROM event_store WHERE processed = 'N' AND processing_attempts < ? " +
+        String query = "SELECT event_id, event_type, subject, data, attempts " +
+                "FROM event_store WHERE is_processed = 'N' AND attempts < ? " +
                 "ORDER BY event_time ASC FETCH FIRST ? ROWS ONLY";
 
         try {
